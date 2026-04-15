@@ -20,15 +20,23 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
       });
-      const data = await res.json();
+      // レスポンスがJSONでない場合（500 HTMLなど）を安全に処理
+      const text = await res.text();
+      let data: { success: boolean; error?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setAuthStatus({ type: 'error', message: `サーバーエラー (${res.status}): APIルートが応答していません` });
+        return;
+      }
       if (data.success) {
         setAuthed(true);
         setAuthStatus({ type: 'idle' });
       } else {
         setAuthStatus({ type: 'error', message: data.error || '認証に失敗しました' });
       }
-    } catch {
-      setAuthStatus({ type: 'error', message: 'ネットワークエラーが発生しました' });
+    } catch (err) {
+      setAuthStatus({ type: 'error', message: `接続エラー: ${err instanceof Error ? err.message : '不明なエラー'}` });
     }
   };
 
