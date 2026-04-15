@@ -6,13 +6,30 @@ import Link from 'next/link';
 export default function AdminPage() {
   const [token, setToken] = useState('');
   const [authed, setAuthed] = useState(false);
+  const [authStatus, setAuthStatus] = useState<{ type: 'idle' | 'loading' | 'error'; message?: string }>({ type: 'idle' });
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error'; message?: string; count?: number }>({ type: 'idle' });
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleAuth = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (token.trim()) setAuthed(true);
+    setAuthStatus({ type: 'loading' });
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAuthed(true);
+        setAuthStatus({ type: 'idle' });
+      } else {
+        setAuthStatus({ type: 'error', message: data.error || '認証に失敗しました' });
+      }
+    } catch {
+      setAuthStatus({ type: 'error', message: 'ネットワークエラーが発生しました' });
+    }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -72,16 +89,31 @@ export default function AdminPage() {
                 <input
                   type="password"
                   value={token}
-                  onChange={(e) => setToken(e.target.value)}
+                  onChange={(e) => { setToken(e.target.value); setAuthStatus({ type: 'idle' }); }}
                   placeholder="管理者トークン"
-                  className="w-full border-2 border-[#e5e7eb] focus:border-[#21cb4d] rounded-xl px-4 py-4 text-[#1A2B3C] font-bold outline-none transition-colors"
+                  className={`w-full border-2 rounded-xl px-4 py-4 text-[#1A2B3C] font-bold outline-none transition-colors ${
+                    authStatus.type === 'error'
+                      ? 'border-red-400 bg-red-50'
+                      : 'border-[#e5e7eb] focus:border-[#21cb4d]'
+                  }`}
                   required
                 />
+                {authStatus.type === 'error' && (
+                  <div className="flex items-center gap-2 text-red-600 text-sm font-bold">
+                    <i className="ri-error-warning-line text-base" />
+                    {authStatus.message}
+                  </div>
+                )}
                 <button
                   type="submit"
-                  className="w-full bg-gradient-to-r from-[#1A2B3C] to-[#1A2B3C]/90 text-white py-4 rounded-full font-black text-lg shadow-lg hover:shadow-xl transition-all hover:-translate-y-1"
+                  disabled={authStatus.type === 'loading'}
+                  className="w-full bg-gradient-to-r from-[#1A2B3C] to-[#1A2B3C]/90 text-white py-4 rounded-full font-black text-lg shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  認証する
+                  {authStatus.type === 'loading' ? (
+                    <span className="flex items-center justify-center gap-3">
+                      <i className="ri-loader-4-line animate-spin" /> 確認中...
+                    </span>
+                  ) : '認証する'}
                 </button>
               </form>
             </div>
