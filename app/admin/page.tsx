@@ -46,12 +46,28 @@ export default function AdminPage() {
     setStatus({ type: 'loading' });
 
     try {
-      // Step 1: Vercel Blob に直接アップロード（サーバー経由しないのでサイズ制限なし）
-      const { upload } = await import('@vercel/blob/client');
-      const blob = await upload(file.name, file, {
+      // Step 1: サーバーからアップロード用トークンを取得
+      const tokenRes = await fetch('/api/upload-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, filename: file.name }),
+      });
+      const tokenText = await tokenRes.text();
+      let tokenData: { clientToken?: string; error?: string };
+      try { tokenData = JSON.parse(tokenText); } catch {
+        setStatus({ type: 'error', message: `サーバーエラー (${tokenRes.status})` });
+        return;
+      }
+      if (!tokenData.clientToken) {
+        setStatus({ type: 'error', message: tokenData.error || 'トークン取得に失敗しました' });
+        return;
+      }
+
+      // Step 2: Vercel Blob に直接アップロード（サーバー経由しないのでサイズ制限なし）
+      const { put: putBlob } = await import('@vercel/blob/client');
+      const blob = await putBlob(`temp-uploads/${file.name}`, file, {
         access: 'public',
-        handleUploadUrl: '/api/upload-token',
-        clientPayload: token,
+        token: tokenData.clientToken,
       });
 
       // Step 2: アップロード済みBlobをサーバーで処理してjobs.csvに変換

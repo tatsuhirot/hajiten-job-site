@@ -1,35 +1,27 @@
-import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
 import { validateAdminToken } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  const body = (await request.json()) as HandleUploadBody;
+export async function POST(request: NextRequest) {
+  const { token: adminToken, filename } = await request.json() as { token: string; filename: string };
 
-  try {
-    const jsonResponse = await handleUpload({
-      body,
-      request,
-      onBeforeGenerateToken: async (_pathname, clientPayload) => {
-        if (!validateAdminToken(clientPayload || '')) {
-          throw new Error('Unauthorized');
-        }
-        return {
-          allowedContentTypes: [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-excel',
-            'text/csv',
-            'application/octet-stream',
-          ],
-          maximumSizeInBytes: 100 * 1024 * 1024, // 100MB
-          addRandomSuffix: false,
-        };
-      },
-      onUploadCompleted: async ({ blob }) => {
-        console.log('Upload completed:', blob.url);
-      },
-    });
-    return NextResponse.json(jsonResponse);
-  } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+  if (!validateAdminToken(adminToken)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const clientToken = await generateClientTokenFromReadWriteToken({
+    token: process.env.BLOB_READ_WRITE_TOKEN!,
+    pathname: `temp-uploads/${Date.now()}-${filename}`,
+    maximumSizeInBytes: 100 * 1024 * 1024, // 100MB
+    allowedContentTypes: [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+      'application/octet-stream',
+    ],
+    validUntil: Date.now() + 5 * 60 * 1000, // 5分
+    addRandomSuffix: false,
+  });
+
+  return NextResponse.json({ clientToken });
 }
