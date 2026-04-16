@@ -5,7 +5,7 @@ import FilterBar from '@/components/FilterBar';
 
 export const revalidate = 3600;
 
-const JOBS_PER_PAGE = 12;
+const JOBS_PER_PAGE = 48;
 
 interface PageProps {
   searchParams: {
@@ -222,19 +222,20 @@ export default async function CareerOptionsPage({ searchParams }: PageProps) {
                           <i className="ri-arrow-left-s-line" />
                         </Link>
                       )}
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                        <Link
-                          key={p}
-                          href={pageUrl(p)}
-                          className={`w-10 h-10 flex items-center justify-center rounded-full text-sm font-black transition-all ${
-                            p === safePage
-                              ? 'bg-[#1A2B3C] text-white shadow-md'
-                              : 'bg-white border-2 border-gray-200 text-[#1A2B3C] hover:border-[#21cb4d]'
-                          }`}
-                        >
-                          {p}
-                        </Link>
-                      ))}
+                      {/* 1ページ目 */}
+                      <PageBtn p={1} current={safePage} url={pageUrl(1)} />
+                      {/* 2ページ目（存在する場合） */}
+                      {totalPages >= 2 && <PageBtn p={2} current={safePage} url={pageUrl(2)} />}
+                      {/* 省略記号（3ページ目以降が現在ページより前にある場合） */}
+                      {safePage > 3 && <span className="text-gray-400 font-bold px-1">…</span>}
+                      {/* 現在ページ（1,2,最終ページ以外） */}
+                      {safePage > 2 && safePage < totalPages && (
+                        <PageBtn p={safePage} current={safePage} url={pageUrl(safePage)} />
+                      )}
+                      {/* 省略記号（現在ページが最終-1より前の場合） */}
+                      {safePage < totalPages - 1 && <span className="text-gray-400 font-bold px-1">…</span>}
+                      {/* 最終ページ（3ページ以上の場合） */}
+                      {totalPages >= 3 && <PageBtn p={totalPages} current={safePage} url={pageUrl(totalPages)} />}
                       {safePage < totalPages && (
                         <Link href={pageUrl(safePage + 1)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white border-2 border-gray-200 text-[#1A2B3C] font-bold hover:border-[#21cb4d] transition-colors">
                           <i className="ri-arrow-right-s-line" />
@@ -269,5 +270,20 @@ export default async function CareerOptionsPage({ searchParams }: PageProps) {
       </section>
 
     </div>
+  );
+}
+
+function PageBtn({ p, current, url }: { p: number; current: number; url: string }) {
+  return (
+    <Link
+      href={url}
+      className={`w-10 h-10 flex items-center justify-center rounded-full text-sm font-black transition-all ${
+        p === current
+          ? 'bg-[#1A2B3C] text-white shadow-md'
+          : 'bg-white border-2 border-gray-200 text-[#1A2B3C] hover:border-[#21cb4d]'
+      }`}
+    >
+      {p}
+    </Link>
   );
 }
