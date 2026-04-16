@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateAdminToken } from '@/lib/auth';
 import * as XLSX from 'xlsx';
 
+export const maxDuration = 60; // Vercel Pro: 最大60秒
+
 const REQUIRED_COLUMNS = ['id', 'title', 'company', 'location', 'salary', 'type', 'description', 'published'];
 
 const XLSX_COLUMN_MAP: Record<string, string> = {
