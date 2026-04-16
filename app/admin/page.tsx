@@ -20,13 +20,12 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
       });
-      // レスポンスがJSONでない場合（500 HTMLなど）を安全に処理
       const text = await res.text();
       let data: { success: boolean; error?: string };
       try {
         data = JSON.parse(text);
       } catch {
-        setAuthStatus({ type: 'error', message: `サーバーエラー (${res.status}): APIルートが応答していません` });
+        setAuthStatus({ type: 'error', message: `サーバーエラー (${res.status})` });
         return;
       }
       if (data.success) {
@@ -35,8 +34,8 @@ export default function AdminPage() {
       } else {
         setAuthStatus({ type: 'error', message: data.error || '認証に失敗しました' });
       }
-    } catch (err) {
-      setAuthStatus({ type: 'error', message: `接続エラー: ${err instanceof Error ? err.message : '不明なエラー'}` });
+    } catch {
+      setAuthStatus({ type: 'error', message: 'サーバーに接続できません。ページを再読み込みしてください。' });
     }
   };
 
@@ -50,8 +49,26 @@ export default function AdminPage() {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒タイムアウト
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      // レスポンスがJSONでない場合（HTMLエラーページなど）を安全に処理
+      const text = await res.text();
+      let data: { success: boolean; error?: string; count?: number };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setStatus({ type: 'error', message: `サーバーエラー (${res.status})。しばらく待ってから再度お試しください。` });
+        return;
+      }
+
       if (data.success) {
         setStatus({ type: 'success', count: data.count, message: `${data.count}件の求人を更新しました` });
         setFile(null);
@@ -59,10 +76,16 @@ export default function AdminPage() {
       } else {
         setStatus({ type: 'error', message: data.error || 'アップロードに失敗しました' });
       }
-    } catch {
-      setStatus({ type: 'error', message: 'ネットワークエラーが発生しました' });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setStatus({ type: 'error', message: 'タイムアウトしました。ファイルサイズを確認して再度お試しください。' });
+      } else {
+        setStatus({ type: 'error', message: 'サーバーに接続できません。インターネット接続を確認してください。' });
+      }
     }
   };
+
+  const isXlsx = file?.name.endsWith('.xlsx');
 
   return (
     <div className="min-h-screen bg-[#F8FFF9]">
@@ -79,7 +102,7 @@ export default function AdminPage() {
           >
             管理画面
           </h1>
-          <p className="text-white/70 mt-4">CSVをアップロードして求人情報を更新します</p>
+          <p className="text-white/70 mt-4">求人ファイルをアップロードして情報を更新します</p>
         </div>
       </section>
 
@@ -129,29 +152,43 @@ export default function AdminPage() {
             /* アップロード画面 */
             <div className="space-y-6">
               <div className="bg-white rounded-3xl shadow-xl p-8 sm:p-12">
-                <h2 className="text-2xl font-black text-[#1A2B3C] mb-8 flex items-center gap-3">
+                <h2 className="text-2xl font-black text-[#1A2B3C] mb-2 flex items-center gap-3">
                   <span className="w-8 h-8 bg-gradient-to-br from-[#21cb4d] to-[#e3e148] rounded-lg flex items-center justify-center">
                     <i className="ri-upload-cloud-line text-white text-sm" />
                   </span>
-                  CSVアップロード
+                  求人ファイルをアップロード
                 </h2>
+                <p className="text-[#6B7280] text-sm mb-8 ml-11">
+                  クラウドエージェントからダウンロードした <strong className="text-[#1A2B3C]">XLSX（エクセル）ファイル</strong> をそのままアップロードできます。
+                </p>
 
                 <form onSubmit={handleUpload} className="space-y-6">
                   <div
-                    className="border-2 border-dashed border-[#21cb4d]/40 hover:border-[#21cb4d] rounded-2xl p-8 text-center transition-colors cursor-pointer"
+                    className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors cursor-pointer ${
+                      file
+                        ? 'border-[#21cb4d] bg-[#F8FFF9]'
+                        : 'border-[#21cb4d]/40 hover:border-[#21cb4d]'
+                    }`}
                     onClick={() => fileRef.current?.click()}
                   >
-                    <i className="ri-file-upload-line text-4xl text-[#21cb4d] mb-4" />
-                    <p className="text-[#1A2B3C] font-bold mb-2">
-                      {file ? file.name : 'CSVファイルをクリックして選択'}
+                    <i className={`text-4xl mb-4 ${file ? 'ri-file-excel-2-line text-green-600' : 'ri-file-upload-line text-[#21cb4d]'}`} />
+                    <p className="text-[#1A2B3C] font-bold mb-1">
+                      {file ? file.name : 'ファイルをクリックして選択'}
                     </p>
-                    <p className="text-[#6B7280] text-sm">jobs.csv 形式のファイルのみ対応</p>
+                    {file ? (
+                      <p className="text-[#6B7280] text-sm">
+                        {isXlsx ? 'Excelファイル（自動変換されます）' : 'CSVファイル'}
+                        　{(file.size / 1024).toFixed(0)} KB
+                      </p>
+                    ) : (
+                      <p className="text-[#6B7280] text-sm">XLSX（エクセル）または CSV に対応</p>
+                    )}
                     <input
                       ref={fileRef}
                       type="file"
-                      accept=".csv"
+                      accept=".xlsx,.csv"
                       className="hidden"
-                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                      onChange={(e) => { setFile(e.target.files?.[0] || null); setStatus({ type: 'idle' }); }}
                     />
                   </div>
 
@@ -162,7 +199,8 @@ export default function AdminPage() {
                   >
                     {status.type === 'loading' ? (
                       <span className="flex items-center justify-center gap-3">
-                        <i className="ri-loader-4-line animate-spin" /> アップロード中...
+                        <i className="ri-loader-4-line animate-spin" />
+                        {isXlsx ? 'Excelを変換中...' : 'アップロード中...'}
                       </span>
                     ) : 'アップロードする'}
                   </button>
@@ -179,57 +217,37 @@ export default function AdminPage() {
                 )}
 
                 {status.type === 'error' && (
-                  <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
-                    <i className="ri-error-warning-line text-red-500 text-2xl flex-shrink-0" />
-                    <p className="font-bold text-red-700">{status.message}</p>
+                  <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+                    <i className="ri-error-warning-line text-red-500 text-2xl flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-red-700">{status.message}</p>
+                      <p className="text-sm text-red-500 mt-1">問題が続く場合は管理者にお問い合わせください。</p>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* CSVフォーマット説明 */}
+              {/* 手順ガイド */}
               <div className="bg-white rounded-3xl shadow-xl p-8 sm:p-12">
-                <h3 className="text-lg font-black text-[#1A2B3C] mb-4">CSVフォーマット</h3>
-                <div className="overflow-x-auto">
-                  <table className="text-sm w-full">
-                    <thead>
-                      <tr className="border-b-2 border-[#21cb4d]/20">
-                        {['カラム', '型', '説明'].map((h) => (
-                          <th key={h} className="text-left py-2 pr-4 text-[#1A2B3C] font-black">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="text-[#6B7280]">
-                      {[
-                        ['id', 'string', '求人ID（一意）'],
-                        ['title', 'string', '職種名'],
-                        ['company', 'string', '会社名'],
-                        ['location', 'string', '勤務地'],
-                        ['salary', 'string', '給与'],
-                        ['type', 'string', '正社員 / 契約社員 / 業務委託'],
-                        ['tags', 'string', 'カンマ区切りスキル'],
-                        ['description', 'string', '業務内容'],
-                        ['published', 'boolean', 'TRUE のみ表示'],
-                        ['updated_at', 'date', '更新日'],
-                      ].map(([col, type, desc]) => (
-                        <tr key={col} className="border-b border-gray-100">
-                          <td className="py-2 pr-4 font-bold text-[#1A2B3C]">{col}</td>
-                          <td className="py-2 pr-4">{type}</td>
-                          <td className="py-2">{desc}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-6">
-                  <a
-                    href="/sample.csv"
-                    download
-                    className="inline-flex items-center gap-2 text-[#21cb4d] font-bold hover:underline"
-                  >
-                    <i className="ri-download-line" />
-                    サンプルCSVをダウンロード
-                  </a>
-                </div>
+                <h3 className="text-lg font-black text-[#1A2B3C] mb-6 flex items-center gap-2">
+                  <i className="ri-information-line text-[#21cb4d]" />
+                  アップロード手順
+                </h3>
+                <ol className="space-y-4">
+                  {[
+                    { step: '1', text: 'クラウドエージェント管理画面で最新の求人リストをダウンロード（.xlsxファイル）' },
+                    { step: '2', text: '上のエリアをクリックしてダウンロードしたファイルを選択' },
+                    { step: '3', text: '「アップロードする」ボタンを押す' },
+                    { step: '4', text: '「〇件の求人を更新しました」と表示されたら完了！' },
+                  ].map(({ step, text }) => (
+                    <li key={step} className="flex items-start gap-4">
+                      <span className="w-7 h-7 bg-gradient-to-br from-[#21cb4d] to-[#e3e148] rounded-full flex items-center justify-center text-[#1A2B3C] font-black text-sm flex-shrink-0">
+                        {step}
+                      </span>
+                      <p className="text-[#6B7280] pt-0.5">{text}</p>
+                    </li>
+                  ))}
+                </ol>
               </div>
 
               <div className="text-center">
