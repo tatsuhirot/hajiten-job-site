@@ -153,7 +153,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
                       <i className={`${icon} text-[#21cb4d] mt-0.5 flex-shrink-0`} />
                       <div>
                         <p className="text-xs text-[#6B7280]">{label}</p>
-                        <p className="text-sm font-bold text-[#1A2B3C]">{value}</p>
+                        <p className="text-sm font-bold text-[#1A2B3C] whitespace-pre-wrap">{value}</p>
                       </div>
                     </li>
                   ))}
