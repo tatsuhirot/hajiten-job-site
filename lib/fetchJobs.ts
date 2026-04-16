@@ -1,3 +1,4 @@
+import { list } from '@vercel/blob';
 import Papa from 'papaparse';
 import path from 'path';
 import fs from 'fs';
@@ -34,11 +35,13 @@ export interface Job {
 export async function fetchJobs(): Promise<Job[]> {
   let csvText: string;
 
-  const blobUrl = process.env.JOBS_CSV_BLOB_URL;
+  const hasBlobToken = !!process.env.BLOB_READ_WRITE_TOKEN;
 
-  if (blobUrl) {
-    // 本番: Vercel Blob から取得
-    const res = await fetch(blobUrl, { next: { revalidate: 3600 } });
+  if (hasBlobToken) {
+    // 本番: Vercel Blob から動的に取得
+    const { blobs } = await list({ prefix: 'jobs.csv', limit: 1 });
+    if (blobs.length === 0) return [];
+    const res = await fetch(blobs[0].url, { next: { revalidate: 3600 } });
     if (!res.ok) throw new Error(`CSV fetch failed: ${res.status}`);
     csvText = await res.text();
   } else {
