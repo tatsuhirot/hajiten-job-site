@@ -18,7 +18,7 @@ export default function FilterBar({ types, tags, totalCount, filteredCount, sala
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const currentType     = searchParams.get('type') ?? '';
+  const currentTypes    = searchParams.get('type') ? searchParams.get('type')!.split(',') : [];
   const currentTag      = searchParams.get('tag') ?? '';
   const currentQ        = searchParams.get('q') ?? '';
   const currentSalaries = searchParams.get('salary') ? searchParams.get('salary')!.split(',') : [];
@@ -56,7 +56,7 @@ export default function FilterBar({ types, tags, totalCount, filteredCount, sala
     router.push(pathname, { scroll: false });
   };
 
-  const hasFilter = currentType || currentTag || currentQ || currentSalaries.length > 0 || currentRegions.length > 0 || currentWard23;
+  const hasFilter = currentTypes.length > 0 || currentTag || currentQ || currentSalaries.length > 0 || currentRegions.length > 0 || currentWard23;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
@@ -122,19 +122,23 @@ export default function FilterBar({ types, tags, totalCount, filteredCount, sala
           </div>
         </div>
 
-        {/* 雇用形態 */}
+        {/* 雇用形態（複数選択） */}
         {types.length > 0 && (
           <div>
             <p className="text-xs font-black text-[#1A2B3C] mb-3 tracking-wider uppercase flex items-center gap-2">
               <i className="ri-briefcase-line text-[#21cb4d]" />雇用形態
+              <span className="text-[10px] text-gray-400 font-normal normal-case">複数選択可</span>
             </p>
             <div className="flex flex-wrap gap-2">
-              {types.map((t) => (
-                <button key={t} onClick={() => updateParam('type', currentType === t ? '' : t)}
-                  className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 ${currentType === t ? 'bg-[#1A2B3C] text-white shadow-md scale-105' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                  {t}
-                </button>
-              ))}
+              {types.map((t) => {
+                const selected = currentTypes.includes(t);
+                return (
+                  <button key={t} onClick={() => toggleMulti('type', t, currentTypes)}
+                    className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 ${selected ? 'bg-[#1A2B3C] text-white shadow-md scale-105' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                    {selected && <i className="ri-check-line mr-1" />}{t}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -201,12 +205,12 @@ export default function FilterBar({ types, tags, totalCount, filteredCount, sala
               <button onClick={() => updateParam('ward23', '')} className="hover:opacity-70 ml-1"><i className="ri-close-line" /></button>
             </span>
           )}
-          {currentType && (
-            <span className="inline-flex items-center gap-1 bg-[#1A2B3C] text-white text-xs px-3 py-1.5 rounded-full font-bold">
-              {currentType}
-              <button onClick={() => updateParam('type', '')} className="hover:text-[#e3e148] ml-1"><i className="ri-close-line" /></button>
+          {currentTypes.map((t) => (
+            <span key={t} className="inline-flex items-center gap-1 bg-[#1A2B3C] text-white text-xs px-3 py-1.5 rounded-full font-bold">
+              {t}
+              <button onClick={() => toggleMulti('type', t, currentTypes)} className="hover:text-[#e3e148] ml-1"><i className="ri-close-line" /></button>
             </span>
-          )}
+          ))}
           {currentSalaries.map((key) => {
             const b = salaryBuckets.find((b) => b.key === key);
             return b ? (

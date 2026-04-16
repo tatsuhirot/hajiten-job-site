@@ -36,12 +36,13 @@ export default async function CareerOptionsPage({ searchParams }: PageProps) {
 
   const selectedSalaries = searchParams.salary ? searchParams.salary.split(',') : [];
   const selectedRegions  = searchParams.region  ? searchParams.region.split(',')  : [];
+  const selectedTypes    = searchParams.type    ? searchParams.type.split(',')    : [];
   const ward23 = searchParams.ward23 === 'true';
   const currentPage = Math.max(1, parseInt(searchParams.page ?? '1', 10));
 
   // フィルタリング
   const filtered = allJobs.filter((job) => {
-    if (searchParams.type && job.type !== searchParams.type) return false;
+    if (selectedTypes.length > 0 && !selectedTypes.includes(job.type)) return false;
     if (searchParams.tag && !getTagList(job).includes(searchParams.tag)) return false;
     if (searchParams.q) {
       const q = searchParams.q.toLowerCase();
