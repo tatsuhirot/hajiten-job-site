@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import FilterBar from '@/components/FilterBar';
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 interface PageProps {
   searchParams: {

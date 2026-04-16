@@ -2,7 +2,7 @@ import { fetchJobs, getTagList } from '@/lib/fetchJobs';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 export default async function JobDetailPage({ params }: { params: { id: string } }) {
   const jobs = await fetchJobs();

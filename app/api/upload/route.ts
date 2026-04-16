@@ -59,25 +59,44 @@ function xlsxToCsv(buffer: ArrayBuffer): string {
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
   const today = new Date().toISOString().split('T')[0];
 
-  const mapped = rows.map((r) => {
-    const row: Record<string, string> = {};
+  // 表示に使うカラムのみ保持（未使用19カラムを除外してファイルサイズ削減）
+  const OUTPUT_COLUMNS = [
+    'id', 'title', 'type', 'occupation',
+    'company', 'company_url',
+    'hiring_reason', 'description', 'employment_type',
+    'work_hours_start', 'work_hours_end',
+    'salary', 'compensation_details', 'welfare',
+    'holidays', 'holidays_note',
+    'location', 'address', 'relocation', 'employee_count',
+    'requirements', 'preferred_skills', 'selection_process',
+    'tags', 'published', 'updated_at',
+  ];
+
+  const allMapped = rows.map((r) => {
+    const raw: Record<string, string> = {};
     for (const [jpKey, enKey] of Object.entries(XLSX_COLUMN_MAP)) {
-      row[enKey] = String(r[jpKey] ?? '');
+      raw[enKey] = String(r[jpKey] ?? '');
     }
-    const min = row['salary_min'];
-    const max = row['salary_max'];
-    if (min && max) row['salary'] = `${min}万円〜${max}万円`;
-    else if (min) row['salary'] = `${min}万円〜`;
-    else if (max) row['salary'] = `〜${max}万円`;
-    else row['salary'] = '';
-    row['published'] = row['_published_raw'].includes('掲載OK') ? 'TRUE' : 'FALSE';
-    delete row['_published_raw'];
-    row['tags'] = '';
-    row['updated_at'] = today;
+    const min = raw['salary_min'];
+    const max = raw['salary_max'];
+    if (min && max) raw['salary'] = `${min}万円〜${max}万円`;
+    else if (min) raw['salary'] = `${min}万円〜`;
+    else if (max) raw['salary'] = `〜${max}万円`;
+    else raw['salary'] = '';
+    raw['published'] = raw['_published_raw'].includes('掲載OK') ? 'TRUE' : 'FALSE';
+    raw['tags'] = '';
+    raw['updated_at'] = today;
+
+    // 必要カラムのみ抽出
+    const row: Record<string, string> = {};
+    for (const col of OUTPUT_COLUMNS) row[col] = raw[col] ?? '';
     return row;
   });
 
-  if (!mapped.length) throw new Error('データが0件です');
+  // 掲載OKのみ保存（非掲載を除外してファイルサイズ削減）
+  const mapped = allMapped.filter((r) => r['published'] === 'TRUE');
+
+  if (!mapped.length) throw new Error('掲載OKの求人が0件です');
 
   const headers = Object.keys(mapped[0]);
 
