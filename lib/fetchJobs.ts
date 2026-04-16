@@ -79,3 +79,25 @@ export const SALARY_BUCKETS = [
   { key: '600to800', label: '600〜800万円', min: 600, max: 799 },
   { key: '800plus', label: '800万円以上', min: 800, max: Infinity },
 ] as const;
+
+export const REGIONS = [
+  { key: 'hokkaido', label: '北海道', prefectures: ['北海道'] },
+  { key: 'tohoku',   label: '東北',   prefectures: ['青森県','岩手県','宮城県','秋田県','山形県','福島県'] },
+  { key: 'kanto',    label: '関東',   prefectures: ['茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県'] },
+  { key: 'hokuriku', label: '北陸・甲信越', prefectures: ['新潟県','富山県','石川県','福井県','山梨県','長野県'] },
+  { key: 'tokai',    label: '東海',   prefectures: ['岐阜県','静岡県','愛知県','三重県'] },
+  { key: 'kinki',    label: '近畿',   prefectures: ['滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県'] },
+  { key: 'chugoku',  label: '中国',   prefectures: ['鳥取県','島根県','岡山県','広島県','山口県'] },
+  { key: 'shikoku',  label: '四国',   prefectures: ['徳島県','香川県','愛媛県','高知県'] },
+  { key: 'kyushu',   label: '九州・沖縄', prefectures: ['福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県'] },
+] as const;
+
+export const TOKYO_23_WARDS = [
+  '千代田区','中央区','港区','新宿区','文京区','台東区','墨田区','江東区',
+  '品川区','目黒区','大田区','世田谷区','渋谷区','中野区','杉並区','豊島区',
+  '北区','荒川区','板橋区','練馬区','足立区','葛飾区','江戸川区',
+] as const;
+
+export function isIn23Wards(job: Job): boolean {
+  return TOKYO_23_WARDS.some((ward) => job.address?.includes(ward));
+}
