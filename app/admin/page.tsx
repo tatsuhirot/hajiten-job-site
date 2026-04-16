@@ -46,48 +46,83 @@ export default function AdminPage() {
     setStatus({ type: 'loading' });
 
     try {
-      // Step 1: サーバーからアップロード用トークンを取得
-      const tokenRes = await fetch('/api/upload-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, filename: file.name }),
-      });
-      const tokenText = await tokenRes.text();
-      let tokenData: { clientToken?: string; error?: string };
-      try { tokenData = JSON.parse(tokenText); } catch {
-        setStatus({ type: 'error', message: `サーバーエラー (${tokenRes.status})` });
-        return;
-      }
-      if (!tokenData.clientToken) {
-        setStatus({ type: 'error', message: tokenData.error || 'トークン取得に失敗しました' });
-        return;
+      let csvText: string;
+
+      if (file.name.endsWith('.xlsx')) {
+        // ブラウザ側でXLSX→CSV変換（サーバーに送るのはテキストのみ）
+        const XLSX = await import('xlsx');
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: 'array' });
+        const ws = wb.Sheets['job_list'];
+        if (!ws) {
+          setStatus({ type: 'error', message: 'job_list シートが見つかりません' });
+          return;
+        }
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+        const today = new Date().toISOString().split('T')[0];
+
+        const COLUMN_MAP: Record<string, string> = {
+          '求人ID': 'id', 'タイトル': 'title', '職種': 'type', '職業': 'occupation',
+          '企業名': 'company', 'コーポレートサイトURL': 'company_url', '募集背景': 'hiring_reason',
+          '仕事内容': 'description', '雇用形態': 'employment_type',
+          '始業時間': 'work_hours_start', '終業時間': 'work_hours_end',
+          '年収下限（万円）': '_sal_min', '年収上限（万円）': '_sal_max',
+          '待遇条件・昇給賞与': 'compensation_details', '福利厚生': 'welfare',
+          '休日休暇': 'holidays', '休日休暇に関する補足事項': 'holidays_note',
+          '勤務地（都道府県）': 'location', '勤務地住所': 'address', '転勤の有無': 'relocation',
+          '従業員数': 'employee_count', '必須要件': 'requirements', '歓迎/尚可': 'preferred_skills',
+          '選考プロセス': 'selection_process', '求人媒体への掲載': '_pub',
+        };
+        const OUTPUT = [
+          'id','title','type','occupation','company','company_url','hiring_reason','description',
+          'employment_type','work_hours_start','work_hours_end','salary','compensation_details',
+          'welfare','holidays','holidays_note','location','address','relocation','employee_count',
+          'requirements','preferred_skills','selection_process','tags','published','updated_at',
+        ];
+
+        const escape = (v: string) => {
+          const s = v.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          return (s.includes(',') || s.includes('"') || s.includes('\n'))
+            ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+
+        const mapped = rows.map(r => {
+          const raw: Record<string, string> = {};
+          for (const [jp, en] of Object.entries(COLUMN_MAP)) raw[en] = String(r[jp] ?? '');
+          const min = raw['_sal_min'], max = raw['_sal_max'];
+          raw['salary'] = min && max ? `${min}万円〜${max}万円` : min ? `${min}万円〜` : max ? `〜${max}万円` : '';
+          raw['published'] = raw['_pub'].includes('掲載OK') ? 'TRUE' : 'FALSE';
+          raw['tags'] = '';
+          raw['updated_at'] = today;
+          const row: Record<string, string> = {};
+          for (const col of OUTPUT) row[col] = raw[col] ?? '';
+          return row;
+        }).filter(r => r['published'] === 'TRUE');
+
+        if (!mapped.length) {
+          setStatus({ type: 'error', message: '掲載OKの求人が0件です' });
+          return;
+        }
+        csvText = [OUTPUT.join(','), ...mapped.map(r => OUTPUT.map(h => escape(r[h])).join(','))].join('\n');
+      } else {
+        csvText = await file.text();
       }
 
-      // Step 2: Vercel Blob に直接アップロード（サーバー経由しないのでサイズ制限なし）
-      const { put: putBlob } = await import('@vercel/blob/client');
-      const blob = await putBlob(`temp-uploads/${file.name}`, file, {
-        access: 'public',
-        token: tokenData.clientToken,
-      });
-
-      // Step 2: アップロード済みBlobをサーバーで処理してjobs.csvに変換
+      // CSVをサーバーに送信
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2分
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-      const processRes = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, blobUrl: blob.url, filename: file.name }),
-        signal: controller.signal,
-      });
+      const formData = new FormData();
+      formData.append('token', token);
+      formData.append('file', new Blob([csvText], { type: 'text/csv' }), 'jobs.csv');
+
+      const res = await fetch('/api/upload', { method: 'POST', body: formData, signal: controller.signal });
       clearTimeout(timeoutId);
 
-      const processText = await processRes.text();
+      const text = await res.text();
       let data: { success: boolean; error?: string; count?: number };
-      try {
-        data = JSON.parse(processText);
-      } catch {
-        setStatus({ type: 'error', message: `サーバーエラー (${processRes.status})。しばらく待ってから再度お試しください。` });
+      try { data = JSON.parse(text); } catch {
+        setStatus({ type: 'error', message: `サーバーエラー (${res.status})` });
         return;
       }
 
@@ -102,7 +137,7 @@ export default function AdminPage() {
       if (err instanceof Error && err.name === 'AbortError') {
         setStatus({ type: 'error', message: 'タイムアウトしました。再度お試しください。' });
       } else {
-        setStatus({ type: 'error', message: 'サーバーに接続できません。インターネット接続を確認してください。' });
+        setStatus({ type: 'error', message: `エラー: ${err instanceof Error ? err.message : String(err)}` });
       }
     }
   };
