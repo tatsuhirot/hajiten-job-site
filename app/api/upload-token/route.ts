@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     allowedContentTypes: ['text/csv', 'application/octet-stream'],
     validUntil: Date.now() + 5 * 60 * 1000, // 5分
     addRandomSuffix: false,
+    allowOverwrite: true,
   });
 
   return NextResponse.json({ clientToken });
