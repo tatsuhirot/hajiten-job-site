@@ -44,28 +44,34 @@ export default function AdminPage() {
     if (!file) return;
 
     setStatus({ type: 'loading' });
-    const formData = new FormData();
-    formData.append('token', token);
-    formData.append('file', file);
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒タイムアウト
+      // Step 1: Vercel Blob に直接アップロード（サーバー経由しないのでサイズ制限なし）
+      const { upload } = await import('@vercel/blob/client');
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload-token',
+        clientPayload: token,
+      });
 
-      const res = await fetch('/api/upload', {
+      // Step 2: アップロード済みBlobをサーバーで処理してjobs.csvに変換
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2分
+
+      const processRes = await fetch('/api/upload', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, blobUrl: blob.url, filename: file.name }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
 
-      // レスポンスがJSONでない場合（HTMLエラーページなど）を安全に処理
-      const text = await res.text();
+      const processText = await processRes.text();
       let data: { success: boolean; error?: string; count?: number };
       try {
-        data = JSON.parse(text);
+        data = JSON.parse(processText);
       } catch {
-        setStatus({ type: 'error', message: `サーバーエラー (${res.status})。しばらく待ってから再度お試しください。` });
+        setStatus({ type: 'error', message: `サーバーエラー (${processRes.status})。しばらく待ってから再度お試しください。` });
         return;
       }
 
@@ -78,7 +84,7 @@ export default function AdminPage() {
       }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        setStatus({ type: 'error', message: 'タイムアウトしました。ファイルサイズを確認して再度お試しください。' });
+        setStatus({ type: 'error', message: 'タイムアウトしました。再度お試しください。' });
       } else {
         setStatus({ type: 'error', message: 'サーバーに接続できません。インターネット接続を確認してください。' });
       }

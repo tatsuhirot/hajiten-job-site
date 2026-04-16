@@ -64,14 +64,12 @@ function xlsxToCsv(buffer: ArrayBuffer): string {
     for (const [jpKey, enKey] of Object.entries(XLSX_COLUMN_MAP)) {
       row[enKey] = String(r[jpKey] ?? '');
     }
-    // salary を生成
     const min = row['salary_min'];
     const max = row['salary_max'];
     if (min && max) row['salary'] = `${min}万円〜${max}万円`;
     else if (min) row['salary'] = `${min}万円〜`;
     else if (max) row['salary'] = `〜${max}万円`;
     else row['salary'] = '';
-    // published を判定
     row['published'] = row['_published_raw'].includes('掲載OK') ? 'TRUE' : 'FALSE';
     delete row['_published_raw'];
     row['tags'] = '';
@@ -98,43 +96,32 @@ function xlsxToCsv(buffer: ArrayBuffer): string {
   return lines.join('\n');
 }
 
-const XLSX_MIME_TYPES = [
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-];
-
 export async function POST(request: NextRequest) {
-  const formData = await request.formData();
-  const token = formData.get('token') as string;
-  const file = formData.get('file') as File;
+  const body = await request.json() as { token: string; blobUrl: string; filename: string };
+  const { token, blobUrl, filename } = body;
 
   if (!validateAdminToken(token)) {
     return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
   }
 
-  if (!file) {
-    return NextResponse.json({ success: false, error: 'ファイルを選択してください' }, { status: 400 });
-  }
-
-  const isXlsx = XLSX_MIME_TYPES.includes(file.type) || file.name.endsWith('.xlsx');
-  const isCsv = file.type === 'text/csv' || file.name.endsWith('.csv');
-
-  if (!isXlsx && !isCsv) {
-    return NextResponse.json({ success: false, error: 'XLSXまたはCSVファイルをアップロードしてください' }, { status: 400 });
-  }
+  const isXlsx = filename.endsWith('.xlsx');
 
   let csvText: string;
 
   if (isXlsx) {
+    const res = await fetch(blobUrl);
+    if (!res.ok) {
+      return NextResponse.json({ success: false, error: `ファイル取得失敗 (${res.status})` }, { status: 500 });
+    }
+    const buffer = await res.arrayBuffer();
     try {
-      const buffer = await file.arrayBuffer();
       csvText = xlsxToCsv(buffer);
     } catch (e) {
       return NextResponse.json({ success: false, error: `XLSX変換エラー: ${(e as Error).message}` }, { status: 400 });
     }
   } else {
-    csvText = await file.text();
-    // 必須カラムチェック（CSVの場合のみ）
+    const res = await fetch(blobUrl);
+    csvText = await res.text();
     const firstLine = csvText.split('\n')[0] || '';
     const headers = firstLine.split(',').map((h) => h.trim().replace(/"/g, ''));
     const missing = REQUIRED_COLUMNS.filter((col) => !headers.includes(col));
@@ -148,12 +135,8 @@ export async function POST(request: NextRequest) {
 
   const count = csvText.split('\n').slice(1).filter((l) => l.trim()).length;
 
-  // Vercel Blob に保存
   const blob = new Blob([csvText], { type: 'text/csv' });
-  await put('jobs.csv', blob, {
-    access: 'public',
-    addRandomSuffix: false,
-  });
+  await put('jobs.csv', blob, { access: 'public', addRandomSuffix: false });
 
   revalidatePath('/');
   revalidatePath('/career-options');
