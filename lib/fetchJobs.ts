@@ -62,3 +62,20 @@ export async function fetchJobs(): Promise<Job[]> {
 export function getTagList(job: Job): string[] {
   return job.tags ? job.tags.split(',').map((t) => t.trim()).filter(Boolean) : [];
 }
+
+export function getLocationList(job: Job): string[] {
+  return job.location ? job.location.split(',').map((l) => l.trim()).filter(Boolean) : [];
+}
+
+export function parseSalaryMin(salary: string): number | null {
+  const match = salary.match(/^([\d,]+)万円/);
+  if (match) return parseInt(match[1].replace(',', ''), 10);
+  return null;
+}
+
+export const SALARY_BUCKETS = [
+  { key: 'under400', label: '〜400万円', min: 0, max: 399 },
+  { key: '400to600', label: '400〜600万円', min: 400, max: 599 },
+  { key: '600to800', label: '600〜800万円', min: 600, max: 799 },
+  { key: '800plus', label: '800万円以上', min: 800, max: Infinity },
+] as const;

@@ -1,4 +1,4 @@
-import { fetchJobs, getTagList } from '@/lib/fetchJobs';
+import { fetchJobs, getTagList, getLocationList, parseSalaryMin, SALARY_BUCKETS } from '@/lib/fetchJobs';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import FilterBar from '@/components/FilterBar';
@@ -10,24 +10,49 @@ interface PageProps {
     type?: string;
     location?: string;
     tag?: string;
+    q?: string;
+    salary?: string;
   };
 }
 
 function buildFilterOptions(jobs: Awaited<ReturnType<typeof fetchJobs>>) {
   const types = Array.from(new Set(jobs.map((j) => j.type).filter(Boolean))).sort();
-  const locations = Array.from(new Set(jobs.map((j) => j.location).filter(Boolean))).sort();
+  const locations = Array.from(new Set(jobs.flatMap((j) => getLocationList(j)))).sort();
   const tags = Array.from(new Set(jobs.flatMap((j) => getTagList(j)))).sort();
   return { types, locations, tags };
+}
+
+function formatLocation(location: string): string {
+  const parts = location.split(',').map((l) => l.trim()).filter(Boolean);
+  if (parts.length <= 2) return parts.join(' / ');
+  return `${parts[0]} 他${parts.length - 1}都道府県`;
 }
 
 export default async function CareerOptionsPage({ searchParams }: PageProps) {
   const allJobs = await fetchJobs();
 
+  const selectedSalaries = searchParams.salary ? searchParams.salary.split(',') : [];
+
   // フィルタリング
   const filtered = allJobs.filter((job) => {
     if (searchParams.type && job.type !== searchParams.type) return false;
-    if (searchParams.location && job.location !== searchParams.location) return false;
+    if (searchParams.location && !getLocationList(job).includes(searchParams.location)) return false;
     if (searchParams.tag && !getTagList(job).includes(searchParams.tag)) return false;
+    if (searchParams.q) {
+      const q = searchParams.q.toLowerCase();
+      const hit = [job.title, job.company, job.occupation, job.description]
+        .some((f) => f?.toLowerCase().includes(q));
+      if (!hit) return false;
+    }
+    if (selectedSalaries.length > 0) {
+      const min = parseSalaryMin(job.salary);
+      if (min === null) return false;
+      const inRange = selectedSalaries.some((key) => {
+        const bucket = SALARY_BUCKETS.find((b) => b.key === key);
+        return bucket && min >= bucket.min && min <= bucket.max;
+      });
+      if (!inRange) return false;
+    }
     return true;
   });
 
@@ -89,6 +114,7 @@ export default async function CareerOptionsPage({ searchParams }: PageProps) {
                   tags={tags}
                   totalCount={allJobs.length}
                   filteredCount={filtered.length}
+                  salaryBuckets={SALARY_BUCKETS}
                 />
               </Suspense>
 
@@ -137,7 +163,7 @@ export default async function CareerOptionsPage({ searchParams }: PageProps) {
                           <div className="space-y-3 mb-6">
                             <div className="flex items-center gap-3 text-[#6B7280] text-sm">
                               <i className="ri-map-pin-line text-[#21cb4d] text-base flex-shrink-0" />
-                              <span>{job.location}</span>
+                              <span>{formatLocation(job.location)}</span>
                             </div>
                             <div className="flex items-center gap-3 text-[#6B7280] text-sm">
                               <i className="ri-money-yen-circle-line text-[#21cb4d] text-base flex-shrink-0" />

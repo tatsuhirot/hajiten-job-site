@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { SALARY_BUCKETS } from '@/lib/fetchJobs';
 
 interface FilterBarProps {
   types: string[];
@@ -9,6 +10,7 @@ interface FilterBarProps {
   tags: string[];
   totalCount: number;
   filteredCount: number;
+  salaryBuckets: typeof SALARY_BUCKETS;
 }
 
 export default function FilterBar({
@@ -17,6 +19,7 @@ export default function FilterBar({
   tags,
   totalCount,
   filteredCount,
+  salaryBuckets,
 }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -25,6 +28,10 @@ export default function FilterBar({
   const currentType = searchParams.get('type') ?? '';
   const currentLocation = searchParams.get('location') ?? '';
   const currentTag = searchParams.get('tag') ?? '';
+  const currentQ = searchParams.get('q') ?? '';
+  const currentSalaries = searchParams.get('salary') ? searchParams.get('salary')!.split(',') : [];
+
+  const [keyword, setKeyword] = useState(currentQ);
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -39,11 +46,32 @@ export default function FilterBar({
     [router, pathname, searchParams]
   );
 
+  const toggleSalary = useCallback(
+    (key: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      const current = params.get('salary') ? params.get('salary')!.split(',') : [];
+      const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+      if (next.length > 0) {
+        params.set('salary', next.join(','));
+      } else {
+        params.delete('salary');
+      }
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams]
+  );
+
+  const handleKeywordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateParam('q', keyword.trim());
+  };
+
   const clearAll = () => {
+    setKeyword('');
     router.push(pathname, { scroll: false });
   };
 
-  const hasFilter = currentType || currentLocation || currentTag;
+  const hasFilter = currentType || currentLocation || currentTag || currentQ || currentSalaries.length > 0;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
@@ -69,6 +97,38 @@ export default function FilterBar({
       </div>
 
       <div className="space-y-5">
+        {/* キーワード検索 */}
+        <div>
+          <p className="text-xs font-black text-[#1A2B3C] mb-3 tracking-wider uppercase flex items-center gap-2">
+            <i className="ri-search-line text-[#21cb4d]" />
+            キーワード検索
+          </p>
+          <form onSubmit={handleKeywordSubmit} className="flex gap-2">
+            <input
+              type="text"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="職種・企業名・スキルなど"
+              className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm text-[#1A2B3C] font-bold outline-none focus:border-[#21cb4d] transition-colors"
+            />
+            <button
+              type="submit"
+              className="bg-[#1A2B3C] text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-[#1A2B3C]/80 transition-colors"
+            >
+              検索
+            </button>
+            {currentQ && (
+              <button
+                type="button"
+                onClick={() => { setKeyword(''); updateParam('q', ''); }}
+                className="text-gray-400 hover:text-[#1A2B3C] px-2 transition-colors"
+              >
+                <i className="ri-close-line text-lg" />
+              </button>
+            )}
+          </form>
+        </div>
+
         {/* 雇用形態 */}
         {types.length > 0 && (
           <div>
@@ -93,6 +153,34 @@ export default function FilterBar({
             </div>
           </div>
         )}
+
+        {/* 年収帯（複数選択可） */}
+        <div>
+          <p className="text-xs font-black text-[#1A2B3C] mb-3 tracking-wider uppercase flex items-center gap-2">
+            <i className="ri-money-yen-circle-line text-[#21cb4d]" />
+            年収帯
+            <span className="text-[10px] text-gray-400 font-normal normal-case">複数選択可</span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {salaryBuckets.map((bucket) => {
+              const selected = currentSalaries.includes(bucket.key);
+              return (
+                <button
+                  key={bucket.key}
+                  onClick={() => toggleSalary(bucket.key)}
+                  className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 ${
+                    selected
+                      ? 'bg-[#21cb4d] text-white shadow-md scale-105'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {selected && <i className="ri-check-line mr-1" />}
+                  {bucket.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* 勤務地 */}
         {locations.length > 0 && (
@@ -124,7 +212,7 @@ export default function FilterBar({
           <div>
             <p className="text-xs font-black text-[#1A2B3C] mb-3 tracking-wider uppercase flex items-center gap-2">
               <i className="ri-price-tag-3-line text-[#21cb4d]" />
-              スキル・キーワード
+              スキル・タグ
             </p>
             <div className="flex flex-wrap gap-2">
               {tags.map((tag) => (
@@ -149,6 +237,14 @@ export default function FilterBar({
       {hasFilter && (
         <div className="mt-5 pt-5 border-t border-gray-100 flex flex-wrap gap-2">
           <span className="text-xs text-gray-400 font-bold self-center">絞り込み中：</span>
+          {currentQ && (
+            <span className="inline-flex items-center gap-1 bg-gray-700 text-white text-xs px-3 py-1.5 rounded-full font-bold">
+              「{currentQ}」
+              <button onClick={() => { setKeyword(''); updateParam('q', ''); }} className="hover:text-[#e3e148] ml-1">
+                <i className="ri-close-line" />
+              </button>
+            </span>
+          )}
           {currentType && (
             <span className="inline-flex items-center gap-1 bg-[#1A2B3C] text-white text-xs px-3 py-1.5 rounded-full font-bold">
               {currentType}
@@ -157,6 +253,17 @@ export default function FilterBar({
               </button>
             </span>
           )}
+          {currentSalaries.map((key) => {
+            const bucket = salaryBuckets.find((b) => b.key === key);
+            return bucket ? (
+              <span key={key} className="inline-flex items-center gap-1 bg-[#21cb4d] text-white text-xs px-3 py-1.5 rounded-full font-bold">
+                {bucket.label}
+                <button onClick={() => toggleSalary(key)} className="hover:opacity-70 ml-1">
+                  <i className="ri-close-line" />
+                </button>
+              </span>
+            ) : null;
+          })}
           {currentLocation && (
             <span className="inline-flex items-center gap-1 bg-[#1A2B3C] text-white text-xs px-3 py-1.5 rounded-full font-bold">
               {currentLocation}
