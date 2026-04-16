@@ -11,14 +11,9 @@ export async function POST(request: NextRequest) {
 
   const clientToken = await generateClientTokenFromReadWriteToken({
     token: process.env.BLOB_READ_WRITE_TOKEN!,
-    pathname: `temp-uploads/${Date.now()}-${filename}`,
+    pathname: 'jobs.csv',
     maximumSizeInBytes: 100 * 1024 * 1024, // 100MB
-    allowedContentTypes: [
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel',
-      'text/csv',
-      'application/octet-stream',
-    ],
+    allowedContentTypes: ['text/csv', 'application/octet-stream'],
     validUntil: Date.now() + 5 * 60 * 1000, // 5分
     addRandomSuffix: false,
   });

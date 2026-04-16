@@ -108,26 +108,38 @@ export default function AdminPage() {
         csvText = await file.text();
       }
 
-      // CSVをサーバーに送信
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      // 件数カウント（ヘッダー行を除く）
+      const count = csvText.split('\n').slice(1).filter(l => l.trim()).length;
 
-      const formData = new FormData();
-      formData.append('token', token);
-      formData.append('file', new Blob([csvText], { type: 'text/csv' }), 'jobs.csv');
-
-      const res = await fetch('/api/upload', { method: 'POST', body: formData, signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      const text = await res.text();
-      let data: { success: boolean; error?: string; count?: number };
-      try { data = JSON.parse(text); } catch {
-        setStatus({ type: 'error', message: `サーバーエラー (${res.status})` });
+      // Step 1: クライアントトークン取得
+      const tokenRes = await fetch('/api/upload-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, filename: 'jobs.csv' }),
+      });
+      if (!tokenRes.ok) {
+        setStatus({ type: 'error', message: '認証エラーが発生しました' });
         return;
       }
+      const { clientToken } = await tokenRes.json() as { clientToken: string };
+
+      // Step 2: Vercel Blob に直接アップロード（サーバー経由なし）
+      const { put: blobPut } = await import('@vercel/blob/client');
+      await blobPut('jobs.csv', new Blob([csvText], { type: 'text/csv' }), {
+        access: 'public',
+        token: clientToken,
+      });
+
+      // Step 3: ページキャッシュをクリア
+      const revalRes = await fetch('/api/revalidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, count }),
+      });
+      const data = await revalRes.json() as { success: boolean; error?: string };
 
       if (data.success) {
-        setStatus({ type: 'success', count: data.count, message: `${data.count}件の求人を更新しました` });
+        setStatus({ type: 'success', count, message: `${count}件の求人を更新しました` });
         setFile(null);
         if (fileRef.current) fileRef.current.value = '';
       } else {
