@@ -41,7 +41,7 @@ export async function fetchJobs(): Promise<Job[]> {
     // 本番: Vercel Blob から動的に取得
     const { blobs } = await list({ prefix: 'jobs.csv', limit: 1 });
     if (blobs.length === 0) return [];
-    const res = await fetch(blobs[0].url, { next: { revalidate: 3600 } });
+    const res = await fetch(blobs[0].url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`CSV fetch failed: ${res.status}`);
     csvText = await res.text();
   } else {
